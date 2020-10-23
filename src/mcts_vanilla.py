@@ -5,6 +5,7 @@ from math import sqrt, log
 num_nodes = 1000
 explore_faction = 2.
 
+
 def traverse_nodes(node, board, state, identity):
     """ Traverses the tree until the end criterion are met.
 
@@ -22,36 +23,33 @@ def traverse_nodes(node, board, state, identity):
     opponent’s turn. Remember: the opponent’s win rate (X¬j) = (1 – bot’s win rate).
 
     """
-    """
-    Pseudo code:
-    highest_UCT = 0
-    favorite_child = None
-    if node.untried_actions:
 
-        return node
-    else
+
+    if node.untried_actions:
+        return (node, state)
+    else:
+        favorite_child = choice(list(node.child_nodes.values()))
+        highest_UCT = uct(favorite_child, identity)
         if identity == 'red':
-            indentity = 'blue'
+            identity = 'blue'
         else:
             identity = 'red'
         for child in node.child_nodes:
-            if (uct(child, identity) > highest_UCT):
-                highest_UCT = uct(child, identity);
-                favorite_child = child;
-        traverse_nodes(favorite_child, identity)
-    """
-
-
+            if (uct(node.child_nodes[child], identity) > highest_UCT):
+               highest_UCT = uct(node.child_nodes[child], identity);
+               favorite_child = node.child_nodes[child];
+        return traverse_nodes(favorite_child, board, board.next_state(state, favorite_child.parent_action), identity)
     pass
     # Hint: return leaf_node
+
 
 def uct(node, identity):
     win_rate = 0
     if identity == 'red':
-        win_rate = 1-(node.wins/node.visits)
+        win_rate = 1 - (node.wins / node.visits)
     else:
-        win_rate = node.wins/node.visits
-    return win_rate + explore_faction*sqrt(log(node.parent.visits, 2)/node.visits)
+        win_rate = node.wins / node.visits
+    return win_rate + explore_faction * sqrt(log(node.parent.visits, 2) / node.visits)
 
 
 def expand_leaf(node, board, state):
@@ -72,6 +70,12 @@ def expand_leaf(node, board, state):
     node.child = untried action
     return node.child
     """
+    notTried = choice(node.untried_actions)
+    newState = board.next_state(state, notTried)
+    newNode = MCTSNode(parent=node, parent_action=notTried, action_list=board.legal_actions(newState))
+    node.untried_actions.remove(notTried)
+    node.child_nodes[notTried] = newNode
+    return (newNode, newState)
 
     pass
     # Hint: return new_node
@@ -86,19 +90,10 @@ def rollout(board, state):
 
     """
 
-    """
-    pseudo code
-    while game not over:
-        board.next_state(state, choice(board.legal_actions(state)))
-
-        current_player = player1
-    while not board.is_ended(state):
-        last_action = current_player(board, state)
-        state = board.next_state(state, last_action)
-        current_player = player1 if current_player == player2 else player2
-    print("Finished!")
-
-    """
+    if board.is_ended(state):
+        return board.points_values(state)
+    else:
+        return rollout(board, board.next_state(state, choice(board.legal_actions(state))))
     pass
 
 
@@ -110,10 +105,9 @@ def backpropagate(node, won):
         won:    An indicator of whether the bot won or lost the game.
 
     """
-    if won:
-        ++node.wins
-    ++node.visits
-    if node.parent != None:
+    node.wins += won
+    node.visits += 1
+    if node.parent is not None:
         backpropagate(node.parent, won)
     pass
 
@@ -128,18 +122,9 @@ def think(board, state):
     Returns:    The action to be taken.
 
     """
-    """
-    pseudo code
-    explore = traverse_nodes(root_node, board, sampled_game, board.current_player(sampled_game))
-    expand_leaf(explore)
 
-
-
-    rollout(board, state)
-
-
-    """
     identity_of_bot = board.current_player(state)
+
     root_node = MCTSNode(parent=None, parent_action=None, action_list=board.legal_actions(state))
 
     for step in range(num_nodes):
@@ -150,7 +135,19 @@ def think(board, state):
         node = root_node
 
         # Do MCTS - This is all you!
+        explore = traverse_nodes(node, board, sampled_game, board.current_player(sampled_game))
+        newNode = expand_leaf(explore[0], board, explore[1])
+        result = rollout(board, newNode[1])
+        backpropagate(newNode[0], result[identity_of_bot])
 
     # Return an action, typically the most frequently used action (from the root) or the action with the best
     # estimated win rate.
-    return None
+
+    rand_choice = choice(list(root_node.child_nodes.values()))
+    best_move = rand_choice.parent_action
+    best_win_rate = rand_choice.wins
+    for next_node in root_node.child_nodes:
+        if root_node.child_nodes[next_node].wins > best_win_rate:
+            best_move = root_node.child_nodes[next_node].parent_action
+            best_win_rate = root_node.child_nodes[next_node].wins
+    return best_move
